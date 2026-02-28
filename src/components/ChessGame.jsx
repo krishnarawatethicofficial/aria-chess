@@ -106,6 +106,9 @@ const ChessGame = ({ onGameUpdate }) => {
     const pointerDownPos = useRef(null);
     const pointerDownTime = useRef(0);
 
+    // Track when Aria started thinking to enforce minimum think time
+    const ariaThinkStartTime = useRef(0);
+
     useEffect(() => { playerColorRef.current = playerColor; }, [playerColor]);
     useEffect(() => { gameStartedRef.current = gameStarted; }, [gameStarted]);
 
@@ -178,22 +181,28 @@ const ChessGame = ({ onGameUpdate }) => {
             else if (typeof line === 'string' && line.startsWith('bestmove')) {
                 const moveStr = line.split(' ')[1];
                 if (moveStr && moveStr !== '(none)') {
-                    try {
-                        const mo = { from: moveStr.substring(0, 2), to: moveStr.substring(2, 4) };
-                        if (moveStr.length > 4) mo.promotion = moveStr[4];
-                        gameRef.current.move(mo);
-                        syncFen();
-                        clearSel();
-                        const moveInfo = getLastMoveInfo();
-                        if (gameRef.current.isGameOver()) {
-                            const msg = getGameOverMsg();
-                            setStatus(msg); setTimerActive(false); setGameStarted(false);
-                            if (onGameUpdate) onGameUpdate("Game over!", gameRef.current.history().length, msg, moveInfo);
-                        } else {
-                            setStatus("Your turn.");
-                            if (onGameUpdate) onGameUpdate("Your turn.", gameRef.current.history().length, null, moveInfo);
-                        }
-                    } catch (e) { console.error("Engine move error:", moveStr, e.message); }
+                    const elapsed = Date.now() - ariaThinkStartTime.current;
+                    const minThinkTime = 3000; // Force at least 3 seconds
+                    const delay = Math.max(0, minThinkTime - elapsed);
+
+                    setTimeout(() => {
+                        try {
+                            const mo = { from: moveStr.substring(0, 2), to: moveStr.substring(2, 4) };
+                            if (moveStr.length > 4) mo.promotion = moveStr[4];
+                            gameRef.current.move(mo);
+                            syncFen();
+                            clearSel();
+                            const moveInfo = getLastMoveInfo();
+                            if (gameRef.current.isGameOver()) {
+                                const msg = getGameOverMsg();
+                                setStatus(msg); setTimerActive(false); setGameStarted(false);
+                                if (onGameUpdate) onGameUpdate("Game over!", gameRef.current.history().length, msg, moveInfo);
+                            } else {
+                                setStatus("Your turn.");
+                                if (onGameUpdate) onGameUpdate("Your turn.", gameRef.current.history().length, null, moveInfo);
+                            }
+                        } catch (e) { console.error("Engine move error:", moveStr, e.message); }
+                    }, delay);
                 }
             }
         };
@@ -287,6 +296,7 @@ const ChessGame = ({ onGameUpdate }) => {
 
     const requestEngineMove = useCallback(() => {
         setStatus("Aria is thinking...");
+        ariaThinkStartTime.current = Date.now();
         const { depth, movetime } = getDifficultyParams(difficultyRef.current);
         engineRef.current.postMessage(`position fen ${gameRef.current.fen()}`);
         engineRef.current.postMessage(`go depth ${depth} movetime ${movetime}`);
