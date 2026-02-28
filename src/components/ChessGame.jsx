@@ -40,6 +40,32 @@ const sqToCoords = (sq, orient) => {
     return orient === 'white' ? { col: f, row: 7 - rk } : { col: 7 - f, row: rk };
 };
 
+// Material values for adaptive difficulty
+const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+
+const calcMaterialBalance = (game, playerColor) => {
+    const board = game.board();
+    let playerMat = 0, ariaMat = 0;
+    for (let r = 0; r < 8; r++)
+        for (let c = 0; c < 8; c++) {
+            const p = board[r][c];
+            if (p) {
+                const val = PIECE_VALUES[p.type] || 0;
+                if (p.color === playerColor) playerMat += val;
+                else ariaMat += val;
+            }
+        }
+    return playerMat - ariaMat; // positive = player ahead
+};
+
+// Map difficulty (1-10) to Stockfish search params
+const getDifficultyParams = (level) => {
+    // level 1 = very weak, level 10 = full strength
+    const depth = Math.max(2, Math.min(14, Math.round(level * 1.3 + 1)));
+    const movetime = Math.max(200, Math.min(2000, Math.round(level * 180 + 100)));
+    return { depth, movetime };
+};
+
 const coordsToSq = (col, row, orient) => {
     const [f, rk] = orient === 'white' ? [col, 7 - row] : [7 - col, row];
     return `${String.fromCharCode(97 + f)}${rk + 1}`;
@@ -63,6 +89,11 @@ const ChessGame = ({ onGameUpdate }) => {
 
     // Premove state
     const [premove, setPremove] = useState(null);
+
+    // Adaptive difficulty (1-10)
+    const [difficulty, setDifficulty] = useState(5);
+    const difficultyRef = useRef(5);
+    const prevMaterialRef = useRef(0);
 
     const engineRef = useRef(null);
     const timerRef = useRef(null);
@@ -222,10 +253,43 @@ const ChessGame = ({ onGameUpdate }) => {
         return () => clearInterval(timerRef.current);
     }, [timerActive, gameStarted]);
 
+    // Update difficulty based on player's move quality
+    const updateDifficulty = useCallback(() => {
+        const currentBalance = calcMaterialBalance(gameRef.current, playerColorRef.current);
+        const prevBalance = prevMaterialRef.current;
+        const delta = currentBalance - prevBalance;
+        prevMaterialRef.current = currentBalance;
+
+        let newDiff = difficultyRef.current;
+
+        // Player gained material → they're playing well → Aria gets stronger
+        if (delta > 0) {
+            newDiff = Math.min(10, newDiff + Math.ceil(delta / 2));
+        }
+        // Player lost material → they're struggling → Aria gets weaker
+        else if (delta < 0) {
+            newDiff = Math.max(1, newDiff + Math.floor(delta / 2));
+        }
+        // No material change but game progressing → slight drift toward medium
+        else {
+            if (newDiff > 5) newDiff -= 0.3;
+            else if (newDiff < 5) newDiff += 0.3;
+        }
+
+        // Check: if player is significantly ahead, boost Aria
+        if (currentBalance >= 5) newDiff = Math.min(10, newDiff + 1);
+        else if (currentBalance <= -5) newDiff = Math.max(1, newDiff - 1);
+
+        newDiff = Math.round(Math.max(1, Math.min(10, newDiff)));
+        difficultyRef.current = newDiff;
+        setDifficulty(newDiff);
+    }, []);
+
     const requestEngineMove = useCallback(() => {
         setStatus("Aria is thinking...");
+        const { depth, movetime } = getDifficultyParams(difficultyRef.current);
         engineRef.current.postMessage(`position fen ${gameRef.current.fen()}`);
-        engineRef.current.postMessage('go movetime 1000');
+        engineRef.current.postMessage(`go depth ${depth} movetime ${movetime}`);
     }, []);
 
     const startGame = () => {
@@ -238,6 +302,8 @@ const ChessGame = ({ onGameUpdate }) => {
         setPlayerColor(c); playerColorRef.current = c;
         setGameStarted(true); gameStartedRef.current = true; setTimerActive(true);
         clearSel(); clearPremove(); syncFen();
+        // Reset adaptive difficulty
+        setDifficulty(5); difficultyRef.current = 5; prevMaterialRef.current = 0;
         if (c === 'b') { setStatus("Aria is thinking..."); if (onGameUpdate) onGameUpdate("Aria is thinking...", 0, null); requestEngineMove(); }
         else { setStatus("Your turn."); if (onGameUpdate) onGameUpdate("Your turn.", 0, null); }
     };
@@ -250,6 +316,7 @@ const ChessGame = ({ onGameUpdate }) => {
                 if ((p.color === 'w' && to[1] === '8') || (p.color === 'b' && to[1] === '1')) mo.promotion = 'q';
             }
             gameRef.current.move(mo); syncFen(); clearSel(); clearPremove();
+            updateDifficulty(); // Adjust Aria's strength based on this move
             const moveInfo = getLastMoveInfo();
             if (gameRef.current.isGameOver()) {
                 const msg = getGameOverMsg();
@@ -261,7 +328,7 @@ const ChessGame = ({ onGameUpdate }) => {
             }
             return true;
         } catch (e) { console.log("Invalid:", from, to, e.message); return false; }
-    }, [syncFen, clearSel, clearPremove, requestEngineMove, onGameUpdate, getLastMoveInfo, getGameOverMsg]);
+    }, [syncFen, clearSel, clearPremove, requestEngineMove, onGameUpdate, getLastMoveInfo, getGameOverMsg, updateDifficulty]);
 
     // Drag-drop
     const handlePieceDrop = useCallback(({ piece, sourceSquare, targetSquare }) => {
@@ -512,6 +579,21 @@ const ChessGame = ({ onGameUpdate }) => {
                                     <div className="flex justify-between items-center bg-gray-950/70 p-2.5 rounded-lg border border-gray-800/40">
                                         <span className="text-gray-500">Moves</span>
                                         <span className="text-white font-bold font-mono">{Math.ceil(gameRef.current.history().length / 2)}</span>
+                                    </div>
+                                    <div className="bg-gray-950/70 p-2.5 rounded-lg border border-gray-800/40">
+                                        <div className="flex justify-between items-center mb-1.5">
+                                            <span className="text-gray-500">Aria Level</span>
+                                            <span className="text-white font-bold font-mono">{difficulty}/10</span>
+                                        </div>
+                                        <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full rounded-full transition-all duration-500"
+                                                style={{
+                                                    width: `${difficulty * 10}%`,
+                                                    background: difficulty <= 3 ? '#22c55e' : difficulty <= 6 ? '#eab308' : difficulty <= 8 ? '#f97316' : '#ef4444',
+                                                }}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
