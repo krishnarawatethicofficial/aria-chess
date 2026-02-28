@@ -60,9 +60,9 @@ const calcMaterialBalance = (game, playerColor) => {
 
 // Map difficulty (1-10) to Stockfish search params
 const getDifficultyParams = (level) => {
-    // level 1 = very weak, level 10 = full strength
-    const depth = Math.max(2, Math.min(14, Math.round(level * 1.3 + 1)));
-    const movetime = Math.max(200, Math.min(2000, Math.round(level * 180 + 100)));
+    // level 1 = very weak (depth 1), level 10 = full strength (depth 14)
+    const depth = Math.max(1, Math.min(14, Math.round((level - 1) * 1.4 + 1)));
+    const movetime = Math.max(3000, Math.min(5000, Math.round(level * 200 + 2800))); // At least 3s
     return { depth, movetime };
 };
 
@@ -90,9 +90,9 @@ const ChessGame = ({ onGameUpdate }) => {
     // Premove state
     const [premove, setPremove] = useState(null);
 
-    // Adaptive difficulty (1-10)
-    const [difficulty, setDifficulty] = useState(5);
-    const difficultyRef = useRef(5);
+    // Adaptive difficulty (1-10) starts weak
+    const [difficulty, setDifficulty] = useState(1);
+    const difficultyRef = useRef(1);
     const prevMaterialRef = useRef(0);
 
     const engineRef = useRef(null);
@@ -303,7 +303,7 @@ const ChessGame = ({ onGameUpdate }) => {
         setGameStarted(true); gameStartedRef.current = true; setTimerActive(true);
         clearSel(); clearPremove(); syncFen();
         // Reset adaptive difficulty
-        setDifficulty(5); difficultyRef.current = 5; prevMaterialRef.current = 0;
+        setDifficulty(1); difficultyRef.current = 1; prevMaterialRef.current = 0;
         if (c === 'b') { setStatus("Aria is thinking..."); if (onGameUpdate) onGameUpdate("Aria is thinking...", 0, null); requestEngineMove(); }
         else { setStatus("Your turn."); if (onGameUpdate) onGameUpdate("Your turn.", 0, null); }
     };
