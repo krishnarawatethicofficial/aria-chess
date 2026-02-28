@@ -108,6 +108,34 @@ const ChessGame = ({ onGameUpdate }) => {
         return coordsToSq(col, row, orient);
     }, []);
 
+    // Helper: get last move info for chat context
+    const getLastMoveInfo = useCallback(() => {
+        const hist = gameRef.current.history({ verbose: true });
+        if (hist.length === 0) return null;
+        const last = hist[hist.length - 1];
+        return {
+            san: last.san,
+            piece: last.piece,
+            captured: last.captured || null,
+            isCheck: last.san.includes('+'),
+            isCheckmate: last.san.includes('#'),
+            color: last.color,
+            moveNumber: Math.ceil(hist.length / 2),
+            totalMoves: hist.length,
+        };
+    }, []);
+
+    // Helper: format game-over message with You/Aria instead of White/Black
+    const getGameOverMsg = useCallback(() => {
+        if (gameRef.current.isCheckmate()) {
+            const loserTurn = gameRef.current.turn(); // the side that is checkmated
+            const ariaWins = loserTurn === playerColorRef.current;
+            return ariaWins ? 'Game over! Aria wins by checkmate!' : 'Game over! You win by checkmate!';
+        }
+        if (gameRef.current.isDraw()) return 'Game over! Draw.';
+        return 'Game over!';
+    }, []);
+
     // Engine initialization
     useEffect(() => {
         const worker = new Worker('/stockfish.js');
@@ -124,15 +152,14 @@ const ChessGame = ({ onGameUpdate }) => {
                         gameRef.current.move(mo);
                         syncFen();
                         clearSel();
+                        const moveInfo = getLastMoveInfo();
                         if (gameRef.current.isGameOver()) {
-                            let msg = "Game over!";
-                            if (gameRef.current.isCheckmate()) msg = `Game over! ${gameRef.current.turn() === 'w' ? 'Black' : 'White'} wins by checkmate.`;
-                            else if (gameRef.current.isDraw()) msg = "Game over! Draw.";
+                            const msg = getGameOverMsg();
                             setStatus(msg); setTimerActive(false); setGameStarted(false);
-                            if (onGameUpdate) onGameUpdate("Game over!", gameRef.current.history().length, msg);
+                            if (onGameUpdate) onGameUpdate("Game over!", gameRef.current.history().length, msg, moveInfo);
                         } else {
                             setStatus("Your turn.");
-                            if (onGameUpdate) onGameUpdate("Your turn.", gameRef.current.history().length, null);
+                            if (onGameUpdate) onGameUpdate("Your turn.", gameRef.current.history().length, null, moveInfo);
                         }
                     } catch (e) { console.error("Engine move error:", moveStr, e.message); }
                 }
@@ -160,15 +187,14 @@ const ChessGame = ({ onGameUpdate }) => {
                 }
                 gameRef.current.move(mo);
                 syncFen(); clearSel();
+                const moveInfo = getLastMoveInfo();
                 if (gameRef.current.isGameOver()) {
-                    let msg = "Game over!";
-                    if (gameRef.current.isCheckmate()) msg = `Game over! ${gameRef.current.turn() === 'w' ? 'Black' : 'White'} wins by checkmate.`;
-                    else if (gameRef.current.isDraw()) msg = "Game over! Draw.";
+                    const msg = getGameOverMsg();
                     setStatus(msg); setTimerActive(false); setGameStarted(false);
-                    if (onGameUpdate) onGameUpdate("Game over!", gameRef.current.history().length, msg);
+                    if (onGameUpdate) onGameUpdate("Game over!", gameRef.current.history().length, msg, moveInfo);
                 } else {
                     requestEngineMove();
-                    if (onGameUpdate) onGameUpdate("Aria is thinking...", gameRef.current.history().length, null);
+                    if (onGameUpdate) onGameUpdate("Aria is thinking...", gameRef.current.history().length, null, moveInfo);
                 }
             } catch (e) { console.log("Premove illegal:", from, to, e.message); }
         }, 120);
@@ -184,10 +210,9 @@ const ChessGame = ({ onGameUpdate }) => {
             setter(prev => {
                 if (prev - 1 <= 0) {
                     clearInterval(timerRef.current); setTimerActive(false); setGameStarted(false);
-                    const winner = turn === playerColorRef.current
-                        ? (playerColorRef.current === 'w' ? 'Black' : 'White')
-                        : (playerColorRef.current === 'w' ? 'White' : 'Black');
-                    setStatus(`Game over! ${winner} wins on time.`);
+                    const youLost = turn === playerColorRef.current;
+                    const msg = youLost ? 'Game over! Aria wins on time!' : 'Game over! You win on time!';
+                    setStatus(msg);
                     return 0;
                 }
                 return prev - 1;
@@ -224,19 +249,18 @@ const ChessGame = ({ onGameUpdate }) => {
                 if ((p.color === 'w' && to[1] === '8') || (p.color === 'b' && to[1] === '1')) mo.promotion = 'q';
             }
             gameRef.current.move(mo); syncFen(); clearSel(); clearPremove();
+            const moveInfo = getLastMoveInfo();
             if (gameRef.current.isGameOver()) {
-                let msg = "Game over!";
-                if (gameRef.current.isCheckmate()) msg = `Game over! ${gameRef.current.turn() === 'w' ? 'Black' : 'White'} wins by checkmate.`;
-                else if (gameRef.current.isDraw()) msg = "Game over! Draw.";
+                const msg = getGameOverMsg();
                 setStatus(msg); setTimerActive(false); setGameStarted(false);
-                if (onGameUpdate) onGameUpdate("Game over!", gameRef.current.history().length, msg);
+                if (onGameUpdate) onGameUpdate("Game over!", gameRef.current.history().length, msg, moveInfo);
             } else {
                 requestEngineMove();
-                if (onGameUpdate) onGameUpdate("Aria is thinking...", gameRef.current.history().length, null);
+                if (onGameUpdate) onGameUpdate("Aria is thinking...", gameRef.current.history().length, null, moveInfo);
             }
             return true;
         } catch (e) { console.log("Invalid:", from, to, e.message); return false; }
-    }, [syncFen, clearSel, clearPremove, requestEngineMove, onGameUpdate]);
+    }, [syncFen, clearSel, clearPremove, requestEngineMove, onGameUpdate, getLastMoveInfo, getGameOverMsg]);
 
     // Drag-drop
     const handlePieceDrop = useCallback(({ piece, sourceSquare, targetSquare }) => {
@@ -326,9 +350,9 @@ const ChessGame = ({ onGameUpdate }) => {
     const resignGame = () => {
         if (!gameStartedRef.current) return;
         setTimerActive(false); setGameStarted(false); clearSel(); clearPremove();
-        const w = playerColorRef.current === 'w' ? 'Black' : 'White';
-        setStatus(`Game over! You resigned. ${w} wins.`);
-        if (onGameUpdate) onGameUpdate("Game over!", gameRef.current.history().length, `Game over! You resigned. ${w} wins.`);
+        const msg = 'Game over! You resigned. Aria wins!';
+        setStatus(msg);
+        if (onGameUpdate) onGameUpdate("Game over!", gameRef.current.history().length, msg, null);
     };
 
     const orient = playerColor === 'w' ? 'white' : 'black';

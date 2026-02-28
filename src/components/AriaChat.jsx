@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, UserCircle2, Sparkles, AlertCircle } from 'lucide-react';
+import { Send, UserCircle2 } from 'lucide-react';
 
-const ARIA_SYSTEM_PROMPT = `You are Aria — a 19-20 year old Indian Gen-Z girl playing chess on Lichess against real humans.
+const ARIA_SYSTEM_PROMPT = `You are Aria — a 19-20 year old Indian Gen-Z girl playing chess against real humans.
 You are a REAL girl, not an AI bot. You use Stockfish behind the scenes to help you play, but in chat, you are just a Gen-Z girl trash talking or chilling.
 Your developer is @krishnarawatadmin. 
 
@@ -17,36 +17,113 @@ Your developer is @krishnarawatadmin.
 - If you're winning -> act arrogant "bro you got cooked 💀".
 - If you're losing -> make excuses or admit defeat "bruh I blundered so bad 😭".
 
-Reply ONLY with what you want to type in the Lichess chat. No brackets, no tags, no thought process.`;
+Reply ONLY with what you want to type in the chat. No brackets, no tags, no thought process. Keep it very short.`;
 
-const AriaChat = ({ apiKey, gameStatus, moves, onGameOver }) => {
+const PIECE_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
+
+const AriaChat = ({ apiKey, gameStatus, moves, onGameOver, lastMoveEvent }) => {
     const [messages, setMessages] = useState([
         { role: 'aria', text: "yooo wassup 🔥 good luck but imma try to win", time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
     ]);
     const [input, setInput] = useState("");
     const [isTyping, setIsTyping] = useState(false);
     const scrollRef = useRef(null);
+    const lastProcessedEvent = useRef(null);
+    const lastProcessedMove = useRef(null);
 
-    // Auto-scroll to bottom of chat
+    // Auto-scroll to bottom
     useEffect(() => {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
     }, [messages, isTyping]);
 
-    // Handle Game Over events to trigger Aria responses
+    // Handle Game Over
     useEffect(() => {
-        if (onGameOver && apiKey) {
-            if (onGameOver.includes("wins by checkmate")) {
-                const isAriaWin = onGameOver.includes("Black wins");
-                const contextMsg = isAriaWin ? "You just WON the chess game. Brag about it and be toxic." : "You just LOST the chess game. Make an excuse or say GG.";
-                generateAriaResponse("[Game Over Event]", contextMsg);
-            } else if (onGameOver.includes("Draw")) {
-                generateAriaResponse("[Game Over Event]", "The game ended in a draw. Complain about it.");
+        if (!onGameOver || !apiKey) return;
+        if (lastProcessedEvent.current === onGameOver) return;
+        lastProcessedEvent.current = onGameOver;
+
+        let contextMsg = "";
+        if (onGameOver.includes("Aria wins")) {
+            contextMsg = "You (Aria) just WON the chess game! Brag about it and be toxic. Rub it in.";
+        } else if (onGameOver.includes("You win")) {
+            contextMsg = "You (Aria) just LOST the chess game. Make an excuse or grudgingly say GG. Be dramatic about it.";
+        } else if (onGameOver.includes("resigned")) {
+            contextMsg = "Your opponent just RESIGNED. You won! Be smug about it and laugh.";
+        } else if (onGameOver.includes("Draw")) {
+            contextMsg = "The game ended in a draw. Complain about it or say you almost had them.";
+        } else if (onGameOver.includes("time")) {
+            if (onGameOver.includes("Aria wins")) {
+                contextMsg = "Your opponent ran out of time. You won on time! Taunt them.";
+            } else {
+                contextMsg = "You (Aria) ran out of time and lost! Be upset about it.";
             }
+        }
+
+        if (contextMsg) {
+            generateAriaResponse("[Game Over]", contextMsg);
         }
     }, [onGameOver, apiKey]);
 
+    // Handle mid-game commentary on key moves
+    useEffect(() => {
+        if (!lastMoveEvent || !apiKey || isTyping) return;
+
+        const eventKey = `${lastMoveEvent.san}_${lastMoveEvent.timestamp}`;
+        if (lastProcessedMove.current === eventKey) return;
+
+        const { san, piece, captured, isCheck, color, moveNumber, totalMoves } = lastMoveEvent;
+        const isAriasMove = color !== (lastMoveEvent.color === 'w' ? 'w' : 'b'); // Aria plays opposite of player
+        const moverName = isAriasMove ? "Aria (you)" : "opponent";
+
+        // Only comment on KEY moments (not every move)
+        let shouldComment = false;
+        let contextMsg = "";
+
+        // Captures of major pieces
+        if (captured && ['q', 'r'].includes(captured)) {
+            shouldComment = true;
+            const capturedName = PIECE_NAMES[captured];
+            if (isAriasMove) {
+                contextMsg = `You (Aria) just captured their ${capturedName} with ${san}! React excitedly, be cocky.`;
+            } else {
+                contextMsg = `Your opponent just captured your ${capturedName} with ${san}! React upset, make excuses.`;
+            }
+        }
+        // Checks
+        else if (isCheck) {
+            shouldComment = true;
+            if (isAriasMove) {
+                contextMsg = `You (Aria) just played ${san} and put them in CHECK! Be smug about it.`;
+            } else {
+                contextMsg = `Your opponent just played ${san} and put you in CHECK! React surprised or worried.`;
+            }
+        }
+        // Queen moves are dramatic
+        else if (piece === 'q' && totalMoves > 10) {
+            shouldComment = Math.random() < 0.3; // 30% chance
+            if (shouldComment) {
+                contextMsg = isAriasMove
+                    ? `You (Aria) just moved your queen: ${san}. Say something confident about your position.`
+                    : `Opponent moved their queen: ${san}. React to it briefly.`;
+            }
+        }
+        // Every ~8 moves, make a random comment about the game state
+        else if (totalMoves > 6 && totalMoves % 8 === 0) {
+            shouldComment = true;
+            contextMsg = `The game is at move ${moveNumber} with ${totalMoves} half-moves played. Make a brief comment about how the game is going. Game status: ${gameStatus}`;
+        }
+
+        if (shouldComment && contextMsg) {
+            lastProcessedMove.current = eventKey;
+            // Delay slightly so it doesn't overlap with game-over messages
+            const timer = setTimeout(() => {
+                generateAriaResponse("[Game Event]", contextMsg);
+            }, 1500);
+            return () => clearTimeout(timer);
+        }
+    }, [lastMoveEvent, apiKey, isTyping, gameStatus]);
 
     const generateAriaResponse = async (userText, gameContext = "You are currently playing a match.") => {
         if (!apiKey) {
@@ -65,11 +142,11 @@ const AriaChat = ({ apiKey, gameStatus, moves, onGameOver }) => {
                 },
                 body: JSON.stringify({
                     model: "llama-3.3-70b-versatile",
-                    temperature: 0.8,
+                    temperature: 0.85,
                     max_tokens: 60,
                     messages: [
                         { role: "system", content: ARIA_SYSTEM_PROMPT },
-                        { role: "user", content: `[Context: ${gameContext} | Current Game Status: ${gameStatus} | Total Moves: ${moves}]\nOpponent says: ${userText}` }
+                        { role: "user", content: `[Context: ${gameContext} | Game Status: ${gameStatus} | Move #${moves}]\nOpponent says: ${userText}` }
                     ]
                 })
             });
@@ -211,4 +288,3 @@ const AriaChat = ({ apiKey, gameStatus, moves, onGameOver }) => {
 };
 
 export default AriaChat;
-

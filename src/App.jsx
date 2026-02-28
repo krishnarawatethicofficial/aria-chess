@@ -8,12 +8,16 @@ function App() {
     const [gameStatus, setGameStatus] = useState("Waiting to start");
     const [moves, setMoves] = useState(0);
     const [gameOverEvent, setGameOverEvent] = useState(null);
+    const [lastMoveEvent, setLastMoveEvent] = useState(null);
 
-    const handleGameUpdate = (status, moveCount, gameOverString) => {
+    const handleGameUpdate = (status, moveCount, gameOverString, moveInfo) => {
         setGameStatus(status);
         setMoves(moveCount);
         if (gameOverString) {
             setGameOverEvent(gameOverString);
+        }
+        if (moveInfo) {
+            setLastMoveEvent({ ...moveInfo, timestamp: Date.now() });
         }
     };
 
@@ -27,6 +31,7 @@ function App() {
                     gameStatus={gameStatus}
                     moves={moves}
                     onGameOver={gameOverEvent}
+                    lastMoveEvent={lastMoveEvent}
                 />
             </main>
         </div>
