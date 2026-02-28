@@ -108,6 +108,11 @@ const ChessGame = ({ onGameUpdate }) => {
 
     // Track when Aria started thinking to enforce minimum think time
     const ariaThinkStartTime = useRef(0);
+    const minThinkTimeRef = useRef(3000);
+
+    // Track Aria's current time for dynamic speedups
+    const ariaTimeRef = useRef(TIME_CONTROLS.rapid.time);
+    useEffect(() => { ariaTimeRef.current = ariaTime; }, [ariaTime]);
 
     useEffect(() => { playerColorRef.current = playerColor; }, [playerColor]);
     useEffect(() => { gameStartedRef.current = gameStarted; }, [gameStarted]);
@@ -182,7 +187,7 @@ const ChessGame = ({ onGameUpdate }) => {
                 const moveStr = line.split(' ')[1];
                 if (moveStr && moveStr !== '(none)') {
                     const elapsed = Date.now() - ariaThinkStartTime.current;
-                    const minThinkTime = 3000; // Force at least 3 seconds
+                    const minThinkTime = minThinkTimeRef.current; // Use dynamic minimum time
                     const delay = Math.max(0, minThinkTime - elapsed);
 
                     setTimeout(() => {
@@ -248,19 +253,22 @@ const ChessGame = ({ onGameUpdate }) => {
         timerRef.current = setInterval(() => {
             const turn = gameRef.current.turn();
             const setter = turn === playerColorRef.current ? setPlayerTime : setAriaTime;
-            setter(prev => {
-                if (prev - 1 <= 0) {
-                    clearInterval(timerRef.current); setTimerActive(false); setGameStarted(false);
-                    const youLost = turn === playerColorRef.current;
-                    const msg = youLost ? 'Game over! Aria wins on time!' : 'Game over! You win on time!';
-                    setStatus(msg);
-                    return 0;
-                }
-                return prev - 1;
-            });
+            setter(prev => Math.max(0, prev - 1));
         }, 1000);
         return () => clearInterval(timerRef.current);
     }, [timerActive, gameStarted]);
+
+    // Handle game over due to timeout
+    useEffect(() => {
+        if (!gameStarted) return;
+        if (playerTime === 0 || ariaTime === 0) {
+            setTimerActive(false); setGameStarted(false); clearSel(); clearPremove();
+            const youLost = playerTime === 0;
+            const msg = youLost ? 'Game over! Aria wins on time!' : 'Game over! You win on time!';
+            setStatus(msg);
+            if (onGameUpdate) onGameUpdate("Game over!", gameRef.current.history().length, msg, getLastMoveInfo());
+        }
+    }, [playerTime, ariaTime, gameStarted, onGameUpdate, getLastMoveInfo, clearSel, clearPremove]);
 
     // Update difficulty based on player's move quality
     const updateDifficulty = useCallback(() => {
@@ -298,8 +306,20 @@ const ChessGame = ({ onGameUpdate }) => {
         setStatus("Aria is thinking...");
         ariaThinkStartTime.current = Date.now();
         const { depth, movetime } = getDifficultyParams(difficultyRef.current);
+
+        // Speed up if Aria is low on time!
+        let actualMovetime = movetime;
+        const currentAriaTime = ariaTimeRef.current;
+        if (currentAriaTime < 15) {
+            actualMovetime = Math.min(actualMovetime, 500); // Super fast when under 15s
+        } else if (currentAriaTime < 45) {
+            actualMovetime = Math.min(actualMovetime, 1500); // Faster when under 45s
+        }
+
+        minThinkTimeRef.current = actualMovetime; // Pass this delay to the worker response
+
         engineRef.current.postMessage(`position fen ${gameRef.current.fen()}`);
-        engineRef.current.postMessage(`go depth ${depth} movetime ${movetime}`);
+        engineRef.current.postMessage(`go depth ${depth} movetime ${actualMovetime}`);
     }, []);
 
     const startGame = () => {
