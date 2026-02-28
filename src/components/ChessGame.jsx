@@ -610,21 +610,6 @@ const ChessGame = ({ onGameUpdate }) => {
                                         <span className="text-gray-500">Moves</span>
                                         <span className="text-white font-bold font-mono">{Math.ceil(gameRef.current.history().length / 2)}</span>
                                     </div>
-                                    <div className="bg-gray-950/70 p-2.5 rounded-lg border border-gray-800/40">
-                                        <div className="flex justify-between items-center mb-1.5">
-                                            <span className="text-gray-500">Aria Level</span>
-                                            <span className="text-white font-bold font-mono">{difficulty}/10</span>
-                                        </div>
-                                        <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full rounded-full transition-all duration-500"
-                                                style={{
-                                                    width: `${difficulty * 10}%`,
-                                                    background: difficulty <= 3 ? '#22c55e' : difficulty <= 6 ? '#eab308' : difficulty <= 8 ? '#f97316' : '#ef4444',
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
                                 </div>
 
                                 {/* Status */}
