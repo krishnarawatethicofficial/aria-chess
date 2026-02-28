@@ -457,52 +457,78 @@ const ChessGame = ({ onGameUpdate }) => {
             {/* Controls */}
             <div className="w-full lg:w-[260px] flex flex-col gap-3 shrink-0">
                 <div className="bg-gradient-to-b from-gray-900 to-gray-950 border border-gray-800 rounded-2xl p-4 shadow-2xl flex-1 flex flex-col justify-center">
-                    <h3 className="text-white font-bold mb-4 flex items-center gap-2 text-sm tracking-wide">
-                        <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 shadow shadow-pink-500/50"></span> Game Settings
-                    </h3>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-2 block">Play As</label>
-                            <div className="grid grid-cols-3 gap-1.5">
-                                {Object.entries(PLAY_SIDES).map(([k, { label }]) => (
-                                    <button key={k} onClick={() => !gameStarted && setPlaySideSetting(k)} disabled={gameStarted}
-                                        className={`px-1 py-2 text-[10px] font-bold rounded-lg transition-all duration-200 border ${playSideSetting === k ? 'bg-blue-500/15 text-blue-400 border-blue-500/40 shadow-sm shadow-blue-500/10' : 'bg-gray-800/60 text-gray-500 border-gray-700/50 hover:bg-gray-700/60 hover:text-gray-300 disabled:opacity-40'}`}>
-                                        {label}
-                                    </button>
-                                ))}
+                    {!gameStarted ? (
+                        <>
+                            <h3 className="text-white font-bold mb-4 flex items-center gap-2 text-sm tracking-wide">
+                                <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 shadow shadow-pink-500/50"></span> Game Settings
+                            </h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-2 block">Play As</label>
+                                    <div className="grid grid-cols-3 gap-1.5">
+                                        {Object.entries(PLAY_SIDES).map(([k, { label }]) => (
+                                            <button key={k} onClick={() => setPlaySideSetting(k)}
+                                                className={`px-1 py-2 text-[10px] font-bold rounded-lg transition-all duration-200 border ${playSideSetting === k ? 'bg-blue-500/15 text-blue-400 border-blue-500/40 shadow-sm shadow-blue-500/10' : 'bg-gray-800/60 text-gray-500 border-gray-700/50 hover:bg-gray-700/60 hover:text-gray-300'}`}>
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-2 block">Time Control</label>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        {Object.entries(TIME_CONTROLS).map(([k, { label }]) => (
+                                            <button key={k} onClick={() => setTimeControl(k)}
+                                                className={`px-1 py-2 text-[10px] font-bold rounded-lg transition-all duration-200 border ${timeControl === k ? 'bg-pink-500/15 text-pink-400 border-pink-500/40 shadow-sm shadow-pink-500/10' : 'bg-gray-800/60 text-gray-500 border-gray-700/50 hover:bg-gray-700/60 hover:text-gray-300'}`}>
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <button onClick={startGame} disabled={!engineReady}
+                                    className="w-full mt-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 text-sm bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white shadow-lg shadow-pink-600/25 disabled:opacity-40 disabled:shadow-none active:scale-[0.98]">
+                                    <Play size={16} fill="currentColor" />
+                                    {engineReady ? 'Start Match' : 'Loading Engine...'}
+                                </button>
+                                {/* Status when not playing */}
+                                <div className="mt-2 flex flex-col items-center gap-1.5 text-xs font-medium bg-gray-950/70 p-3 rounded-xl border border-gray-800/40">
+                                    <span className={status.includes('wins') || status.includes('over') ? 'text-yellow-400 font-bold text-center' : 'text-gray-400 text-center'}>{status}</span>
+                                </div>
                             </div>
-                        </div>
-                        <div>
-                            <label className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-2 block">Time Control</label>
-                            <div className="grid grid-cols-2 gap-1.5">
-                                {Object.entries(TIME_CONTROLS).map(([k, { label }]) => (
-                                    <button key={k} onClick={() => !gameStarted && setTimeControl(k)} disabled={gameStarted}
-                                        className={`px-1 py-2 text-[10px] font-bold rounded-lg transition-all duration-200 border ${timeControl === k ? 'bg-pink-500/15 text-pink-400 border-pink-500/40 shadow-sm shadow-pink-500/10' : 'bg-gray-800/60 text-gray-500 border-gray-700/50 hover:bg-gray-700/60 hover:text-gray-300 disabled:opacity-40'}`}>
-                                        {label}
-                                    </button>
-                                ))}
+                        </>
+                    ) : (
+                        <>
+                            <h3 className="text-white font-bold mb-4 flex items-center gap-2 text-sm tracking-wide">
+                                <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${turn === playerColor ? 'bg-blue-500 shadow shadow-blue-500/50' : 'bg-pink-500 shadow shadow-pink-500/50'}`}></span>
+                                {turn === playerColor ? 'Your Turn' : "Aria's Turn"}
+                            </h3>
+                            <div className="space-y-4">
+                                {/* Game info */}
+                                <div className="flex flex-col gap-2 text-xs">
+                                    <div className="flex justify-between items-center bg-gray-950/70 p-2.5 rounded-lg border border-gray-800/40">
+                                        <span className="text-gray-500">Playing as</span>
+                                        <span className="text-white font-bold">{playerColor === 'w' ? '⬜ White' : '⬛ Black'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center bg-gray-950/70 p-2.5 rounded-lg border border-gray-800/40">
+                                        <span className="text-gray-500">Moves</span>
+                                        <span className="text-white font-bold font-mono">{Math.ceil(gameRef.current.history().length / 2)}</span>
+                                    </div>
+                                </div>
+
+                                {/* Status */}
+                                <div className="flex flex-col items-center gap-1.5 text-xs font-medium bg-gray-950/70 p-3 rounded-xl border border-gray-800/40">
+                                    <span className="text-gray-400 text-center">{status}</span>
+                                    {premove && <span className="text-blue-400/80 text-[10px] font-mono">⏩ {premove.from} → {premove.to}</span>}
+                                </div>
+
+                                {/* Resign */}
+                                <button onClick={resignGame}
+                                    className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 text-sm bg-red-950/60 hover:bg-red-900/60 text-red-400 border border-red-800/40 active:scale-[0.98]">
+                                    🏳️ Resign Match
+                                </button>
                             </div>
-                        </div>
-                        {!gameStarted ? (
-                            <button onClick={startGame} disabled={!engineReady}
-                                className="w-full mt-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 text-sm bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white shadow-lg shadow-pink-600/25 disabled:opacity-40 disabled:shadow-none active:scale-[0.98]">
-                                <Play size={16} fill="currentColor" />
-                                {engineReady ? 'Start Match' : 'Loading Engine...'}
-                            </button>
-                        ) : (
-                            <button onClick={resignGame}
-                                className="w-full mt-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 text-sm bg-red-950/60 hover:bg-red-900/60 text-red-400 border border-red-800/40 active:scale-[0.98]">
-                                🏳️ Resign Match
-                            </button>
-                        )}
-                        <div className="mt-2 flex flex-col items-center gap-1.5 text-xs font-medium bg-gray-950/70 p-3 rounded-xl border border-gray-800/40">
-                            <div className="flex items-center gap-2">
-                                {gameStarted && <span className={`w-2 h-2 rounded-full animate-pulse ${turn === playerColor ? 'bg-blue-500 shadow shadow-blue-500/50' : 'bg-pink-500 shadow shadow-pink-500/50'}`}></span>}
-                                <span className={status.includes('wins') || status.includes('over') ? 'text-yellow-400 font-bold text-center' : 'text-gray-400 text-center'}>{status}</span>
-                            </div>
-                            {premove && <span className="text-blue-400/80 text-[10px] font-mono">⏩ {premove.from} → {premove.to}</span>}
-                        </div>
-                    </div>
+                        </>
+                    )}
                 </div>
             </div>
 
