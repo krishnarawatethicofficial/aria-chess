@@ -120,6 +120,7 @@ const ChessGame = ({ onGameUpdate }) => {
             isCheck: last.san.includes('+'),
             isCheckmate: last.san.includes('#'),
             color: last.color,
+            playerColor: playerColorRef.current,
             moveNumber: Math.ceil(hist.length / 2),
             totalMoves: hist.length,
         };

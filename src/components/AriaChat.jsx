@@ -73,9 +73,8 @@ const AriaChat = ({ apiKey, gameStatus, moves, onGameOver, lastMoveEvent }) => {
         const eventKey = `${lastMoveEvent.san}_${lastMoveEvent.timestamp}`;
         if (lastProcessedMove.current === eventKey) return;
 
-        const { san, piece, captured, isCheck, color, moveNumber, totalMoves } = lastMoveEvent;
-        const isAriasMove = color !== (lastMoveEvent.color === 'w' ? 'w' : 'b'); // Aria plays opposite of player
-        const moverName = isAriasMove ? "Aria (you)" : "opponent";
+        const { san, piece, captured, isCheck, color, moveNumber, totalMoves, playerColor } = lastMoveEvent;
+        const isAriasMove = color !== playerColor; // Aria plays the opposite color
 
         // Only comment on KEY moments (not every move)
         let shouldComment = false;
