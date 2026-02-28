@@ -4,7 +4,7 @@ import ChessGame from './components/ChessGame';
 import AriaChat from './components/AriaChat';
 
 function App() {
-    const [apiKey, setApiKey] = useState('');
+    const [apiKey, setApiKey] = useState(import.meta.env.VITE_GROQ_KEY || '');
     const [gameStatus, setGameStatus] = useState("Waiting to start");
     const [moves, setMoves] = useState(0);
     const [gameOverEvent, setGameOverEvent] = useState(null);
