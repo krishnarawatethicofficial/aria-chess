@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Stockfish Test</title>
+</head>
+
+<body>
+    <h1>Stockfish Worker Test</h1>
+    <pre id="output"></pre>
+    <script>
+        const output = document.getElementById('output');
+        function log(msg) {
+            output.textContent += msg + '\n';
+            console.log(msg);
+        }
+
+        try {
+            const worker = new Worker('/stockfish.js');
+            log('Worker created');
+
+            worker.onmessage = (event) => {
+                log('MSG type: ' + typeof event.data + ' | data: ' + JSON.stringify(event.data).substring(0, 200));
+            };
+
+            worker.onerror = (e) => {
+                log('ERROR: ' + e.message);
+            };
+
+            log('Sending: uci');
+            worker.postMessage('uci');
+
+            setTimeout(() => {
+                log('Sending: isready');
+                worker.postMessage('isready');
+            }, 1000);
+
+            setTimeout(() => {
+                log('Sending: position startpos');
+                worker.postMessage('position startpos');
+                log('Sending: go movetime 1000');
+                worker.postMessage('go movetime 1000');
+            }, 2000);
+        } catch (e) {
+            log('EXCEPTION: ' + e.message);
+        }
+    </script>
+</body>
+
+</html>
